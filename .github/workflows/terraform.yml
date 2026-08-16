@@ -1,9 +1,10 @@
-name: Terraform Plan & Apply
+name: Terraform Scan Plan & Apply
 
 on:
   push:
     branches:
       - "feature/**"
+      - main
 
   pull_request:
     branches:
@@ -17,100 +18,101 @@ permissions:
 
 jobs:
 
-  # ==========================================
-  # 1. TERRAFORM PLAN
-  # ==========================================
-  terraform-plan:
+  terraform-ci:
 
-    name: Terraform Scan & Plan
+    name: Terraform Scan Plan & Apply
     runs-on: ubuntu-latest
 
     steps:
 
-      # Checkout code
+      # ==========================================
+      # 1. CHECKOUT REPOSITORY
+      # ==========================================
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Install Terraform
+
+      # ==========================================
+      # 2. SETUP TERRAFORM
+      # ==========================================
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # Terraform version
+
+      # ==========================================
+      # 3. TERRAFORM VERSION
+      # ==========================================
+
       - name: Terraform Version
         run: terraform version
 
-      # Format check
+
+      # ==========================================
+      # 4. TERRAFORM FORMAT CHECK
+      # ==========================================
+
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
-      # Terraform Init
-      - name: Terraform Init
-        run: terraform init
 
-      # Terraform Validate
+      # ==========================================
+      # 5. TERRAFORM INIT
+      # ==========================================
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+
+      # ==========================================
+      # 6. TERRAFORM VALIDATE
+      # ==========================================
+
       - name: Terraform Validate
         run: terraform validate
 
-      # Azure Login
+
+      # ==========================================
+      # 7. AZURE LOGIN
+      # ==========================================
+
       - name: Azure Login
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Terraform Plan
+
+      # ==========================================
+      # 8. TERRAFORM PLAN
+      # ==========================================
+
       - name: Terraform Plan
-        env:
-          ARM_USE_OIDC: true
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform plan -out=tfplan
 
 
-  # ==========================================
-  # 2. TERRAFORM APPLY
-  # ==========================================
-  terraform-apply:
+      # ==========================================
+      # 9. VERIFY PLAN FILE
+      # ==========================================
 
-    name: Terraform Apply
-    runs-on: ubuntu-latest
+      - name: Verify Terraform Plan
+        run: |
+          echo "Current directory:"
+          pwd
 
-    needs: terraform-plan
+          echo "Terraform files:"
+          ls -la
 
-    # Apply only from main branch
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+          echo "Checking tfplan:"
+          test -f tfplan
 
-    environment: production
+          echo "tfplan exists successfully."
 
-    steps:
 
-      # Checkout code
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      # ==========================================
+      # 10. TERRAFORM APPLY
+      # ==========================================
 
-      # Install Terraform
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      # Terraform Init
-      - name: Terraform Init
-        run: terraform init
-
-      # Azure Login
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      # Terraform Apply
       - name: Terraform Apply
-        env:
-          ARM_USE_OIDC: true
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: terraform apply -auto-approve
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve tfplan
