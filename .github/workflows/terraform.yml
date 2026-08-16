@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: 10Augterraformpipeline/Pipeline16Aug
+        working-directory: .
  
     steps:
  
